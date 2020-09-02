@@ -7,6 +7,9 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
+
+	"github.com/gorilla/mux"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -43,10 +46,20 @@ func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle(cfg.Path, promhttp.Handler())
+
+	pth := cfg.Path
+	if pth == "" {
+		pth = DefaultObservabilityPath
+	}
+	mux.Handle(pth, promhttp.Handler())
+
+	addr := cfg.Addr
+	if addr == "" {
+		addr = DefaultObservabilityAddr
+	}
 
 	server := &http.Server{
-		Addr:    cfg.Addr,
+		Addr:    addr,
 		Handler: mux,
 	}
 	ctx := cfg.Ctx
@@ -59,29 +72,44 @@ func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
 }
 
 // MetricsRegistry returns the metrics collector used by the metrics server
-func (mc *MetricsServer) MetricsRegistry() *metrics.Metrics {
-	return mc.metrics
+func (ms *MetricsServer) MetricsRegistry() *metrics.Metrics {
+	return ms.metrics
 }
 
-func (mc *MetricsServer) WatchForShutdown() {
+func (ms *MetricsServer) WatchForShutdown() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	for {
 		select {
 		case <-signalChan:
-			mc.server.Shutdown(mc.ctx)
+			ms.server.Shutdown(ms.ctx)
 			return
-		case <-mc.ctx.Done():
-			mc.server.Shutdown(mc.ctx)
+		case <-ms.ctx.Done():
+			ms.server.Shutdown(ms.ctx)
 			return
 		}
 	}
 }
 
 func (ms *MetricsServer) Start() error {
+	go func() {
+		for {
+			select {
+			case <-ms.ctx.Done():
+				cancelContext, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
+				defer func() {
+					cancelFunc()
+				}()
+				ms.server.Shutdown(cancelContext)
+			}
+		}
+	}()
+
 	return ms.server.ListenAndServe()
 }
 
+// wrappedResponseWriter is used to capture the status code
+// response so we can use it in metrics
 type wrappedResponseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -92,20 +120,52 @@ func (wrw wrappedResponseWriter) WriteHeader(code int) {
 	wrw.ResponseWriter.WriteHeader(code)
 }
 
-// RequestMetricsMiddleware instruments incoming http requests
+// URIMapperFunc is used by RequestMetricsMiddleware
+// to map requests URIs to their parametrized counterpart
+type URIMapperFunc func(r *http.Request) string
+
+var MuxURIMapperFunc = func(r *http.Request) string {
+	route := mux.CurrentRoute(r)
+	if route == nil {
+		return DefaultURIMapperFunc(r)
+	}
+	// TODO: should we handle the error or not?
+	t, _ := route.GetPathTemplate()
+	return t
+}
+
+// DefaultURIMapperFunc returns the RequestURI from the URL
+var DefaultURIMapperFunc = func(r *http.Request) string {
+	return r.URL.RequestURI()
+}
+
+// RequestMetricsMiddleware instruments incoming http requests using Go's
+// default ServerMux
 func (ms *MetricsServer) RequestMetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wrappedWriter := wrappedResponseWriter{w, http.StatusOK}
+		startTime := time.Now()
 		next.ServeHTTP(wrappedWriter, r)
-		requestLabels := requestMetricLabels(wrappedWriter, r)
-		ms.metrics.IncrCounterWithLabels([]string{"http.server.requests"}, 1, requestLabels)
+		requestLabels := requestMetricLabels(wrappedWriter, r, DefaultURIMapperFunc)
+		ms.metrics.MeasureSinceWithLabels([]string{"http.server.requests"}, startTime, requestLabels)
 	})
 }
 
-func requestMetricLabels(w wrappedResponseWriter, r *http.Request) []metrics.Label {
+// InstrumentMuxRouter should be paired with a router from gorilla/mux
+func (ms *MetricsServer) InstrumentMuxRouter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wrappedWriter := wrappedResponseWriter{w, http.StatusOK}
+		startTime := time.Now()
+		next.ServeHTTP(wrappedWriter, r)
+		requestLabels := requestMetricLabels(wrappedWriter, r, MuxURIMapperFunc)
+		ms.metrics.MeasureSinceWithLabels([]string{"http.server.requests"}, startTime, requestLabels)
+	})
+}
+
+func requestMetricLabels(w wrappedResponseWriter, r *http.Request, uriMapper func(r *http.Request) string) []metrics.Label {
 	// TODO: add the rest of the required labels
 	method := r.Method
-	uri := r.URL.RequestURI()
+	uri := uriMapper(r)
 	code := w.statusCode
 	outcome := codeToOutcome(code)
 	return []metrics.Label{
