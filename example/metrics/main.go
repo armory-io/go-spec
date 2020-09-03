@@ -23,8 +23,9 @@ func main() {
 
 	// instantiate new metrics server
 	metricsConfig := spec.MetricsServerConfig{
-		ServiceName: "",
-		Ctx:         ctx,
+		ServiceName:   "basicapp",
+		Ctx:           ctx,
+		DefaultLabels: []string{"environment", "development"},
 	}
 	ms, err := spec.NewDefaultMetricsServer(metricsConfig)
 	if err != nil {

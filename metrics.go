@@ -2,6 +2,7 @@ package go_spec
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,24 +24,30 @@ var (
 )
 
 type MetricsServerConfig struct {
-	ServiceName string
-	Addr        string
-	Path        string
-	Ctx         context.Context
+	ServiceName   string
+	Addr          string
+	Path          string
+	Ctx           context.Context
+	DefaultLabels []string
 }
 
 type MetricsServer struct {
-	metrics *metrics.Metrics
-	server  *http.Server
-	ctx     context.Context
+	metrics       *metrics.Metrics
+	server        *http.Server
+	ctx           context.Context
+	defaultLabels []metrics.Label
 }
 
 func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
+	if cfg.ServiceName == "" {
+		return nil, errors.New("metrics server requires an application name be provided by configuration")
+	}
+
 	sink, err := prometheus.NewPrometheusSink()
 	if err != nil {
 		return nil, err
 	}
-	m, err := metrics.New(metrics.DefaultConfig(cfg.ServiceName), sink)
+	m, err := metrics.New(metrics.DefaultConfig(""), sink)
 	if err != nil {
 		return nil, err
 	}
@@ -66,9 +73,22 @@ func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	ms := &MetricsServer{metrics: m, server: server, ctx: ctx}
+	defaultLabels := labelsFromPairs(append(cfg.DefaultLabels, "appName", cfg.ServiceName))
+	ms := &MetricsServer{
+		metrics:       m,
+		server:        server,
+		ctx:           ctx,
+		defaultLabels: defaultLabels,
+	}
 	return ms, nil
+}
+
+func labelsFromPairs(a []string) []metrics.Label {
+	labels := []metrics.Label{}
+	for i := 0; i < len(a); i = i + 2 {
+		labels = append(labels, metrics.Label{Name: a[i], Value: a[i+1]})
+	}
+	return labels
 }
 
 // MetricsRegistry returns the metrics collector used by the metrics server
@@ -158,7 +178,8 @@ func (ms *MetricsServer) InstrumentMuxRouter(next http.Handler) http.Handler {
 		startTime := time.Now()
 		next.ServeHTTP(wrappedWriter, r)
 		requestLabels := requestMetricLabels(wrappedWriter, r, MuxURIMapperFunc)
-		ms.metrics.MeasureSinceWithLabels([]string{"http.server.requests"}, startTime, requestLabels)
+		labels := append(requestLabels, ms.defaultLabels...)
+		ms.metrics.MeasureSinceWithLabels([]string{"http.server.requests"}, startTime, labels)
 	})
 }
 
