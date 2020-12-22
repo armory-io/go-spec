@@ -135,9 +135,13 @@ type wrappedResponseWriter struct {
 	statusCode int
 }
 
-func (wrw wrappedResponseWriter) WriteHeader(code int) {
+func (wrw *wrappedResponseWriter) WriteHeader(code int) {
 	wrw.statusCode = code
 	wrw.ResponseWriter.WriteHeader(code)
+}
+
+func wrapResponseWriter(w http.ResponseWriter) *wrappedResponseWriter {
+	return &wrappedResponseWriter{ResponseWriter: w}
 }
 
 // URIMapperFunc is used by RequestMetricsMiddleware
@@ -163,7 +167,7 @@ var DefaultURIMapperFunc = func(r *http.Request) string {
 // default ServerMux
 func (ms *MetricsServer) RequestMetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wrappedWriter := wrappedResponseWriter{w, http.StatusOK}
+		wrappedWriter := wrapResponseWriter(w)
 		startTime := time.Now()
 		next.ServeHTTP(wrappedWriter, r)
 		requestLabels := requestMetricLabels(wrappedWriter, r, DefaultURIMapperFunc)
@@ -174,7 +178,7 @@ func (ms *MetricsServer) RequestMetricsMiddleware(next http.Handler) http.Handle
 // InstrumentMuxRouter should be paired with a router from gorilla/mux
 func (ms *MetricsServer) InstrumentMuxRouter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wrappedWriter := wrappedResponseWriter{w, http.StatusOK}
+		wrappedWriter := wrapResponseWriter(w)
 		startTime := time.Now()
 		next.ServeHTTP(wrappedWriter, r)
 		requestLabels := requestMetricLabels(wrappedWriter, r, MuxURIMapperFunc)
@@ -183,7 +187,7 @@ func (ms *MetricsServer) InstrumentMuxRouter(next http.Handler) http.Handler {
 	})
 }
 
-func requestMetricLabels(w wrappedResponseWriter, r *http.Request, uriMapper func(r *http.Request) string) []metrics.Label {
+func requestMetricLabels(w *wrappedResponseWriter, r *http.Request, uriMapper func(r *http.Request) string) []metrics.Label {
 	// TODO: add the rest of the required labels
 	method := r.Method
 	uri := uriMapper(r)
