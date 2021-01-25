@@ -28,8 +28,22 @@ type FormatJson struct {
 
 func (fj *FormatJson) Configure(l *logrus.Logger) {
 	// TODO - support configuration of field names
-	formatter := logrus.JSONFormatter{}
+	fm := logrus.FieldMap{}
+	for f, v := range fj.Fields {
+		// we have to switch here because setting fm[f] is of type
+		// fieldKey, not a string...
+		switch f {
+		case logrus.FieldKeyTime:
+			fm[logrus.FieldKeyTime] = v
+		case logrus.FieldKeyMsg:
+			fm[logrus.FieldKeyMsg] = v
+		case logrus.FieldKeyLevel:
+			fm[logrus.FieldKeyLevel] = v
+		}
+	}
+	formatter := logrus.JSONFormatter{FieldMap: fm}
 	l.SetFormatter(&formatter)
+
 }
 
 func ConfigureLogrus(l *logrus.Logger, config Config) error {

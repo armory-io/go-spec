@@ -51,7 +51,7 @@ func TestConfigureLogrus(t *testing.T) {
 			cfg: Config{JSON: FormatJson{
 				Enabled: true,
 			}},
-			formatterType:      &logrus.JSONFormatter{},
+			formatterType:      &logrus.JSONFormatter{FieldMap: logrus.FieldMap{}},
 			expectedHooksTypes: logrus.LevelHooks{},
 		},
 		"injects remote hook when enabled": {
@@ -64,6 +64,20 @@ func TestConfigureLogrus(t *testing.T) {
 			formatterType:      &logrus.TextFormatter{},
 			expectedHooksTypes: newLevelHooks(httpHook),
 		},
+		"injects field modifiers if set": {
+			cfg: Config{JSON: FormatJson{
+				Enabled: true,
+				Fields: map[string]string{
+					"time": "@timestamp",
+				},
+			}},
+			formatterType: &logrus.JSONFormatter{
+				FieldMap: logrus.FieldMap{
+					logrus.FieldKeyTime: "@timestamp",
+				},
+			},
+			expectedHooksTypes: logrus.LevelHooks{},
+		},
 	}
 	for testName, c := range cases {
 		t.Run(testName, func(t *testing.T) {
@@ -73,6 +87,7 @@ func TestConfigureLogrus(t *testing.T) {
 				t.Fatal(err.Error())
 			}
 			assert.IsType(t, c.formatterType, l.Formatter)
+			assert.EqualValues(t, c.formatterType, l.Formatter)
 			assert.EqualValues(t, c.expectedHooksTypes, l.Hooks)
 		})
 	}
