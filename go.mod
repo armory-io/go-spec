@@ -13,4 +13,5 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.6.1
 	go.uber.org/zap v1.15.0
+	gopkg.in/yaml.v2 v2.2.7
 )

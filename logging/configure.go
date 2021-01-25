@@ -10,21 +10,20 @@ import (
 )
 
 type Config struct {
-	Remote RemoteLoggingConfig `json:"remote"`
-	Format struct {
-		JSON *FormatJson `json:"json"`
-	}
+	Remote RemoteLoggingConfig `json:"remote" yaml:"remote"`
+	JSON   FormatJson          `json:"json" yaml:"json"`
 }
 
 type RemoteLoggingConfig struct {
-	Enabled    bool   `json:"enabled"`
-	Endpoint   string `json:"endpoint"`
-	Version    string `json:"version"`
-	CustomerID string `json:"customerId"`
+	Enabled    bool   `json:"enabled" yaml:"enabled"`
+	Endpoint   string `json:"endpoint" yaml:"endpoint"`
+	Version    string `json:"version" yaml:"version"`
+	CustomerID string `json:"customerId" yaml:"customerId"`
 }
 
 type FormatJson struct {
-	Fields map[string]string
+	Enabled bool              `json:"enabled" yaml:"enabled"`
+	Fields  map[string]string `json:"fields" yaml:"fields"`
 }
 
 func (fj *FormatJson) Configure(l *logrus.Logger) {
@@ -49,10 +48,10 @@ func ConfigureLogrus(l *logrus.Logger, config Config) error {
 func configureLogrusFormat(l *logrus.Logger, config Config) {
 	// we only support json as an alternative logging format
 	// this will need to change if that changes in the future
-	if config.Format.JSON == nil {
+	if !config.JSON.Enabled {
 		return
 	}
-	config.Format.JSON.Configure(l)
+	config.JSON.Configure(l)
 }
 
 func configureRemoteLogging(l *logrus.Logger, config RemoteLoggingConfig) error {
@@ -67,6 +66,7 @@ func configureRemoteLogging(l *logrus.Logger, config RemoteLoggingConfig) error 
 	}
 
 	if config.Endpoint == "" {
+		// TODO - return a specific error type here so users can ignore failures making this optional?
 		return fmt.Errorf("remote log forwarding enabled but logging.remote.endpoint is unset")
 	}
 
@@ -84,10 +84,8 @@ func resolveHostname() (string, error) {
 	if err != nil || hostname == "" {
 		hostname = os.Getenv("HOSTNAME")
 	}
-
 	if hostname == "" {
 		return "", fmt.Errorf("failed to resolve hostname")
 	}
-
 	return hostname, nil
 }
