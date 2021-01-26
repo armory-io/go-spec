@@ -47,7 +47,16 @@ func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := metrics.New(metrics.DefaultConfig(""), sink)
+	mc := &metrics.Config{
+		ServiceName:          cfg.ServiceName,
+		EnableHostname:       false, // if true the hostname/pod gets prepended to gauge metrics in Prom/NR (ie spin_terraformer_857fb9b884_97nrn_my_metric)
+		EnableRuntimeMetrics: true,
+		EnableTypePrefix:     false,
+		TimerGranularity:     time.Millisecond,
+		ProfileInterval:      time.Second,
+		FilterDefault:        true,
+	}
+	m, err := metrics.New(mc, sink)
 	if err != nil {
 		return nil, err
 	}
