@@ -76,7 +76,7 @@ func configureRemoteLogging(l *logrus.Logger, config RemoteLoggingConfig) error 
 
 	formatter, err := formatters.NewHttpLogFormatter(hostname, config.CustomerID, config.Version)
 	if err != nil {
-		return fmt.Errorf("failed to instantiate remote log formatter: %s", err.Error())
+		return fmt.Errorf("failed to instantiate remote log formatter: %w", err)
 	}
 
 	if config.Endpoint == "" {
