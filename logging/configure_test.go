@@ -82,7 +82,7 @@ func TestConfigureLogrus(t *testing.T) {
 	for testName, c := range cases {
 		t.Run(testName, func(t *testing.T) {
 			l := logrus.New()
-			err := ConfigureLogrus(l, c.cfg)
+			err := configureLogrus(l, c.cfg)
 			if err != nil {
 				t.Fatal(err.Error())
 			}

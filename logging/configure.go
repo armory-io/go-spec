@@ -9,44 +9,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Config struct {
-	Remote RemoteLoggingConfig `json:"remote" yaml:"remote"`
-	JSON   FormatJson          `json:"json" yaml:"json"`
+func NewLeveledLogger(c Config) (LeveledLogger, error) {
+	return makeAndConfigure(c)
 }
 
-type RemoteLoggingConfig struct {
-	Enabled    bool   `json:"enabled" yaml:"enabled"`
-	Endpoint   string `json:"endpoint" yaml:"endpoint"`
-	Version    string `json:"version" yaml:"version"`
-	CustomerID string `json:"customerId" yaml:"customerId"`
-}
-
-type FormatJson struct {
-	Enabled bool              `json:"enabled" yaml:"enabled"`
-	Fields  map[string]string `json:"fields" yaml:"fields"`
-}
-
-func (fj *FormatJson) Configure(l *logrus.Logger) {
-	// TODO - support configuration of field names
-	fm := logrus.FieldMap{}
-	for f, v := range fj.Fields {
-		// we have to switch here because setting fm[f] is of type
-		// fieldKey, not a string...
-		switch f {
-		case logrus.FieldKeyTime:
-			fm[logrus.FieldKeyTime] = v
-		case logrus.FieldKeyMsg:
-			fm[logrus.FieldKeyMsg] = v
-		case logrus.FieldKeyLevel:
-			fm[logrus.FieldKeyLevel] = v
-		}
+func makeAndConfigure(c Config) (*LogrusAdapter, error) {
+	l := logrus.New()
+	if err := configureLogrus(l, c); err != nil {
+		return nil, err
 	}
-	formatter := logrus.JSONFormatter{FieldMap: fm}
-	l.SetFormatter(&formatter)
-
+	return &LogrusAdapter{logrus.NewEntry(l)}, nil
 }
 
-func ConfigureLogrus(l *logrus.Logger, config Config) error {
+func configureLogrus(l *logrus.Logger, config Config) error {
 	// configure formatting
 	configureLogrusFormat(l, config)
 
