@@ -12,5 +12,6 @@ func (l *LogrusAdapter) WithField(key string, value interface{}) LeveledLogger {
 }
 
 func (l *LogrusAdapter) WithFields(fields map[string]interface{}) LeveledLogger {
-	panic("implement me")
+	withFields := l.Logger.WithFields(fields)
+	return &LogrusAdapter{withFields}
 }
