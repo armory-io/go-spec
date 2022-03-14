@@ -3,7 +3,7 @@ module github.com/armory-io/go-spec
 go 1.14
 
 require (
-	github.com/armon/go-metrics v0.3.4
+	github.com/armon/go-metrics v0.3.9
 	github.com/armory-io/monitoring v0.0.7
 	github.com/armory/go-yaml-tools v0.0.0-20200805235652-dff4b25b6fc7
 	github.com/go-eden/slf4go v1.0.7
