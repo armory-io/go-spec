@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/armon/go-metrics"
@@ -29,6 +30,7 @@ type MetricsServerConfig struct {
 	Path          string
 	Ctx           context.Context
 	DefaultLabels []string
+	Registry      prom.Registerer
 }
 
 type MetricsServer struct {
@@ -43,10 +45,11 @@ func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
 		return nil, errors.New("metrics server requires an application name be provided by configuration")
 	}
 
-	sink, err := prometheus.NewPrometheusSink()
+	sink, err := sinkFromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
+
 	mc := &metrics.Config{
 		ServiceName:          cfg.ServiceName,
 		EnableHostname:       false, // if true the hostname/pod gets prepended to gauge metrics in Prom/NR (ie spin_terraformer_857fb9b884_97nrn_my_metric)
@@ -90,6 +93,15 @@ func NewDefaultMetricsServer(cfg MetricsServerConfig) (*MetricsServer, error) {
 		defaultLabels: defaultLabels,
 	}
 	return ms, nil
+}
+
+func sinkFromConfig(cfg MetricsServerConfig) (*prometheus.PrometheusSink, error) {
+	if cfg.Registry != nil {
+		opts := prometheus.DefaultPrometheusOpts
+		opts.Registerer = cfg.Registry
+		return prometheus.NewPrometheusSinkFrom(opts)
+	}
+	return prometheus.NewPrometheusSink()
 }
 
 func labelsFromPairs(a []string) []metrics.Label {
