@@ -1,3 +1,7 @@
+# Notice
+
+This project is deprecated, use [Armory Go Commons](https://github.com/armory-io/go-commons)
+
 # go-spec
 
 `go-spec` aims to provide a framework for making our Go applications behave like Spinnaker's
